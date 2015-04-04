@@ -1,25 +1,26 @@
 //Copyright (c) 2007-2008, Marton Anka
 //
-//Permission is hereby granted, free of charge, to any person obtaining a 
-//copy of this software and associated documentation files (the "Software"), 
-//to deal in the Software without restriction, including without limitation 
-//the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-//and/or sell copies of the Software, and to permit persons to whom the 
+//Permission is hereby granted, free of charge, to any person obtaining a
+//copy of this software and associated documentation files (the "Software"),
+//to deal in the Software without restriction, including without limitation
+//the rights to use, copy, modify, merge, publish, distribute, sublicense,
+//and/or sell copies of the Software, and to permit persons to whom the
 //Software is furnished to do so, subject to the following conditions:
 //
-//The above copyright notice and this permission notice shall be included 
+//The above copyright notice and this permission notice shall be included
 //in all copies or substantial portions of the Software.
 //
-//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-//OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
-//THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-//FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS 
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+//OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+//THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+//FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 //IN THE SOFTWARE.
 
 #include "stdafx.h"
 #include "mhook-lib/mhook.h"
+#include <assert.h>
 
 //=========================================================================
 // Define _NtOpenProcess so we can dynamically bind to the function
@@ -29,13 +30,13 @@ typedef struct _CLIENT_ID {
 	DWORD_PTR UniqueThread;
 } CLIENT_ID, *PCLIENT_ID;
 
-typedef ULONG (WINAPI* _NtOpenProcess)(OUT PHANDLE ProcessHandle, 
-	     IN ACCESS_MASK AccessMask, IN PVOID ObjectAttributes, 
-		 IN PCLIENT_ID ClientId ); 
+typedef ULONG(WINAPI* _NtOpenProcess)(OUT PHANDLE ProcessHandle,
+	IN ACCESS_MASK AccessMask, IN PVOID ObjectAttributes,
+	IN PCLIENT_ID ClientId);
 
 //=========================================================================
 // Define _SelectObject so we can dynamically bind to the function
-typedef HGDIOBJ (WINAPI* _SelectObject)(HDC hdc, HGDIOBJ hgdiobj); 
+typedef HGDIOBJ(WINAPI* _SelectObject)(HDC hdc, HGDIOBJ hgdiobj);
 
 //=========================================================================
 // Define _getaddrinfo so we can dynamically bind to the function
@@ -43,43 +44,55 @@ typedef int (WSAAPI* _getaddrinfo)(const char* nodename, const char* servname, c
 
 //=========================================================================
 // Define _HeapAlloc so we can dynamically bind to the function
-typedef LPVOID (WINAPI *_HeapAlloc)(HANDLE, DWORD, SIZE_T);
+typedef LPVOID(WINAPI *_HeapAlloc)(HANDLE, DWORD, SIZE_T);
 
 //=========================================================================
 // Define _NtClose so we can dynamically bind to the function
-typedef ULONG (WINAPI* _NtClose)(IN HANDLE Handle);
+typedef ULONG(WINAPI* _NtClose)(IN HANDLE Handle);
+
+//=========================================================================
+// Define _VirtualAlloc so we can dynamically bind to the function
+typedef LPVOID(WINAPI* _VirtualAlloc)(_In_opt_ LPVOID lpAddress, _In_ SIZE_T dwSize, _In_ DWORD flAllocationType, _In_ DWORD flProtect);
+
+//=========================================================================
+// Define _VirtualProtect so we can dynamically bind to the function
+typedef BOOL(WINAPI *_VirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
 
 //=========================================================================
 // Get the current (original) address to the functions to be hooked
 //
 _NtOpenProcess TrueNtOpenProcess = (_NtOpenProcess)
-	GetProcAddress(GetModuleHandle(L"ntdll"), "NtOpenProcess");
+GetProcAddress(GetModuleHandleW(L"ntdll"), "NtOpenProcess");
 
 _SelectObject TrueSelectObject = (_SelectObject)
-	GetProcAddress(GetModuleHandle(L"gdi32"), "SelectObject");
+GetProcAddress(GetModuleHandleW(L"gdi32"), "SelectObject");
 
-_getaddrinfo Truegetaddrinfo = (_getaddrinfo)GetProcAddress(GetModuleHandle(L"ws2_32"), "getaddrinfo");
+_getaddrinfo Truegetaddrinfo = (_getaddrinfo)GetProcAddress(GetModuleHandleW(L"ws2_32"), "getaddrinfo");
 
-_HeapAlloc TrueHeapAlloc = (_HeapAlloc)GetProcAddress(GetModuleHandle(L"kernel32"), "HeapAlloc");
+_HeapAlloc TrueHeapAlloc = (_HeapAlloc)GetProcAddress(GetModuleHandleW(L"kernel32"), "HeapAlloc");
 
-_NtClose TrueNtClose = (_NtClose)GetProcAddress(GetModuleHandle(L"ntdll"), "NtClose");
+_VirtualAlloc TrueVirtualAlloc = (_VirtualAlloc)GetProcAddress(GetModuleHandleW(L"kernel32"), "VirtualAlloc");
+
+_NtClose TrueNtClose = (_NtClose)GetProcAddress(GetModuleHandleW(L"ntdll"), "NtClose");
+
+_VirtualProtect TrueVirtualProtect = (_VirtualProtect)GetProcAddress(GetModuleHandleA("kernel32.dll"), "VirtualProtect");
 
 //=========================================================================
-// This is the function that will replace NtOpenProcess once the hook 
+// This is the function that will replace NtOpenProcess once the hook
 // is in place
 //
-ULONG WINAPI HookNtOpenProcess(OUT PHANDLE ProcessHandle, 
-							   IN ACCESS_MASK AccessMask, 
-							   IN PVOID ObjectAttributes, 
-							   IN PCLIENT_ID ClientId)
+ULONG WINAPI HookNtOpenProcess(OUT PHANDLE ProcessHandle,
+	IN ACCESS_MASK AccessMask,
+	IN PVOID ObjectAttributes,
+	IN PCLIENT_ID ClientId)
 {
-	printf("***** Call to open process %d\n", ClientId->UniqueProcess);
-	return TrueNtOpenProcess(ProcessHandle, AccessMask, 
+	printf("***** Call to open process %llu\n", (unsigned long long)ClientId->UniqueProcess);
+	return TrueNtOpenProcess(ProcessHandle, AccessMask,
 		ObjectAttributes, ClientId);
 }
 
 //=========================================================================
-// This is the function that will replace SelectObject once the hook 
+// This is the function that will replace SelectObject once the hook
 // is in place
 //
 HGDIOBJ WINAPI HookSelectobject(HDC hdc, HGDIOBJ hgdiobj)
@@ -89,7 +102,7 @@ HGDIOBJ WINAPI HookSelectobject(HDC hdc, HGDIOBJ hgdiobj)
 }
 
 //=========================================================================
-// This is the function that will replace SelectObject once the hook 
+// This is the function that will replace SelectObject once the hook
 // is in place
 //
 int WSAAPI Hookgetaddrinfo(const char* nodename, const char* servname, const struct addrinfo* hints, struct addrinfo** res)
@@ -99,21 +112,40 @@ int WSAAPI Hookgetaddrinfo(const char* nodename, const char* servname, const str
 }
 
 //=========================================================================
-// This is the function that will replace HeapAlloc once the hook 
+// This is the function that will replace HeapAlloc once the hook
 // is in place
 //
 LPVOID WINAPI HookHeapAlloc(HANDLE a_Handle, DWORD a_Bla, SIZE_T a_Bla2) {
-	printf("***** Call to HeapAlloc(0x%p, %u, 0x%p)\n", a_Handle, a_Bla, a_Bla2);
+	printf("***** Call to HeapAlloc(0x%p, %u, 0x%" PRIuPTR ")\n", a_Handle, a_Bla, a_Bla2);
 	return TrueHeapAlloc(a_Handle, a_Bla, a_Bla2);
 }
 
 //=========================================================================
-// This is the function that will replace NtClose once the hook 
+// This is the function that will replace NtClose once the hook
 // is in place
 //
 ULONG WINAPI HookNtClose(HANDLE hHandle) {
 	printf("***** Call to NtClose(0x%p)\n", hHandle);
 	return TrueNtClose(hHandle);
+}
+
+//=========================================================================
+// This is the function that will replace VirtualAlloc once the hook
+// is in place
+//
+LPVOID WINAPI HookVirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect) {
+	printf("***** Call to VirtualAlloc(0x%p)\n", lpAddress);
+	return TrueVirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect);
+}
+
+//=========================================================================
+// This is the function that will replace VirtualProtect once the hook
+// is in place
+//
+BOOL WINAPI HookVirtualProtect(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect)
+{
+	printf("***** Call to VirtualProtect(0x%p)\n", lpAddress);
+	return TrueVirtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect);
 }
 
 //=========================================================================
@@ -127,13 +159,14 @@ int wmain(int argc, WCHAR* argv[])
 	if (Mhook_SetHook((PVOID*)&TrueNtOpenProcess, HookNtOpenProcess)) {
 		// Now call OpenProcess and observe NtOpenProcess being redirected
 		// under the hood.
-		hProc = OpenProcess(PROCESS_ALL_ACCESS, 
+		hProc = OpenProcess(PROCESS_ALL_ACCESS,
 			FALSE, GetCurrentProcessId());
 		if (hProc) {
 			printf("Successfully opened self: %p\n", hProc);
 			CloseHandle(hProc);
-		} else {
-			printf("Could not open self: %d\n", GetLastError());
+		}
+		else {
+			printf("Could not open self: %llX\n", (unsigned long long)GetLastError());
 		}
 		// Remove the hook
 		Mhook_Unhook((PVOID*)&TrueNtOpenProcess);
@@ -145,8 +178,9 @@ int wmain(int argc, WCHAR* argv[])
 	if (hProc) {
 		printf("Successfully opened self: %p\n", hProc);
 		CloseHandle(hProc);
-	} else {
-		printf("Could not open self: %d\n", GetLastError());
+	}
+	else {
+		printf("Could not open self: %llX\n", (unsigned long long)GetLastError());
 	}
 
 	// Test another hook, this time in SelectObject
@@ -156,7 +190,7 @@ int wmain(int argc, WCHAR* argv[])
 	// is more of a test case rather than a demo.)
 	printf("Testing SelectObject.\n");
 	if (Mhook_SetHook((PVOID*)&TrueSelectObject, HookSelectobject)) {
-		// error checking omitted for brevity. doesn't matter much 
+		// error checking omitted for brevity. doesn't matter much
 		// in this context anyway.
 		HDC hdc = GetDC(NULL);
 		HDC hdcMem = CreateCompatibleDC(hdc);
@@ -172,29 +206,36 @@ int wmain(int argc, WCHAR* argv[])
 
 	printf("Testing getaddrinfo.\n");
 	if (Mhook_SetHook((PVOID*)&Truegetaddrinfo, Hookgetaddrinfo)) {
-		// error checking omitted for brevity. doesn't matter much 
+		// error checking omitted for brevity. doesn't matter much
 		// in this context anyway.
-		WSADATA wd = {0};
-		WSAStartup(MAKEWORD(2, 2), &wd);
-		char* ip = "localhost";
-		struct addrinfo aiHints;
-		struct addrinfo *res = NULL;
-		memset(&aiHints, 0, sizeof(aiHints));
-		aiHints.ai_family = PF_UNSPEC;
-		aiHints.ai_socktype = SOCK_STREAM;
-		if (getaddrinfo(ip, NULL, &aiHints, &res)) {
-			printf("getaddrinfo failed\n");
-		} else {
-			int n = 0;
-			while(res) {
-				res = res->ai_next;
-				n++;
-			}
-			printf("got %d addresses\n", n);
+		WSADATA wd = { 0 };
+		if (WSAStartup(MAKEWORD(2, 2), &wd))
+		{
+			printf("WSAStartup: %llX", (unsigned long long)GetLastError());
 		}
-		WSACleanup();
-		// Remove the hook
-		Mhook_Unhook((PVOID*)&Truegetaddrinfo);
+		else
+		{
+			char* ip = "localhost";
+			struct addrinfo aiHints;
+			struct addrinfo *res = NULL;
+			memset(&aiHints, 0, sizeof(aiHints));
+			aiHints.ai_family = PF_UNSPEC;
+			aiHints.ai_socktype = SOCK_STREAM;
+			if (getaddrinfo(ip, NULL, &aiHints, &res)) {
+				printf("getaddrinfo failed\n");
+			}
+			else {
+				int n = 0;
+				while (res) {
+					res = res->ai_next;
+					n++;
+				}
+				printf("got %d addresses\n", n);
+			}
+			WSACleanup();
+			// Remove the hook
+			Mhook_Unhook((PVOID*)&Truegetaddrinfo);
+		}
 	}
 
 	printf("Testing HeapAlloc.\n");
@@ -205,14 +246,31 @@ int wmain(int argc, WCHAR* argv[])
 		Mhook_Unhook((PVOID*)&TrueHeapAlloc);
 	}
 
+	printf("Testing VirtualAlloc.\n");
+	if (Mhook_SetHook((PVOID*)&TrueVirtualAlloc, HookVirtualAlloc))
+	{
+		LPVOID mem = VirtualAlloc(nullptr, 10, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		if (mem) VirtualFree(mem, 0, MEM_RELEASE);
+		// Remove the hook
+		Mhook_Unhook((PVOID*)&TrueVirtualAlloc);
+	}
+
 	printf("Testing NtClose.\n");
 	if (Mhook_SetHook((PVOID*)&TrueNtClose, HookNtClose))
 	{
-		CloseHandle(NULL);
+		CloseHandle(GetCurrentProcess());
 		// Remove the hook
 		Mhook_Unhook((PVOID*)&TrueNtClose);
 	}
 
+	printf("Testing VirtualProtect.\n");
+	if (Mhook_SetHook((PVOID*)&TrueVirtualProtect, HookVirtualProtect)) {
+		PBYTE pData[10];
+		DWORD dwProtect = PAGE_EXECUTE_READWRITE;
+		VirtualProtect(pData, sizeof(pData), dwProtect, &dwProtect);
+		// Remove the hook
+		Mhook_Unhook((PVOID*)&TrueVirtualProtect);
+	}
+
 	return 0;
 }
-

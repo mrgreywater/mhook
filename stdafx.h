@@ -5,9 +5,9 @@
 
 #pragma once
 
-#ifndef _WIN32_WINNT		// Allow use of features specific to Windows XP or later.                   
+#ifndef _WIN32_WINNT		// Allow use of features specific to Windows XP or later.
 #define _WIN32_WINNT 0x0501	// Change this to the appropriate value to target other versions of Windows.
-#endif						
+#endif
 
 //for the getaddrinfo test
 #include <WS2tcpip.h>
@@ -15,6 +15,4 @@
 
 #include <windows.h>
 #include <stdio.h>
-
-
-
+#include <inttypes.h>

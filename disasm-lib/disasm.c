@@ -16,20 +16,15 @@
 
 ARCHITECTURE_FORMAT SupportedArchitectures[] =
 {
-	{ ARCH_X86,	&X86 },
+	{ ARCH_X86, &X86 },
 	{ ARCH_X86_16, &X86 },
-	{ ARCH_X64,	&X86 },
+	{ ARCH_X64, &X86 },
 	{ ARCH_UNKNOWN, NULL }
 };
 
 typedef struct _DISASM_ARG_INFO
 {
 	INSTRUCTION *MatchedInstruction;
-	BOOL MatchPrefix;
-	U8 *Opcode;
-	U32 OpcodeLength;
-	INSTRUCTION_TYPE InstructionType;
-	U32 Count;
 } DISASM_ARG_INFO;
 
 //////////////////////////////////////////////////////////////////////
@@ -49,7 +44,7 @@ BOOL InitDisassembler(DISASSEMBLER *Disassembler, ARCHITECTURE_TYPE Architecture
 
 	memset(Disassembler, 0, sizeof(DISASSEMBLER));
 	Disassembler->Initialized = DISASSEMBLER_INITIALIZED;
-	
+
 	ArchFormat = GetArchitectureFormat(Architecture);
 	if (!ArchFormat) { assert(0); return FALSE; }
 	Disassembler->ArchType = ArchFormat->Type;
@@ -71,8 +66,8 @@ BOOL InitInstruction(INSTRUCTION *Instruction, DISASSEMBLER *Disassembler)
 	memset(Instruction, 0, sizeof(INSTRUCTION));
 	Instruction->Initialized = INSTRUCTION_INITIALIZED;
 	Instruction->Disassembler = Disassembler;
-	memset(Instruction->String, ' ', MAX_OPCODE_DESCRIPTION-1);
-	Instruction->String[MAX_OPCODE_DESCRIPTION-1] = '\0';
+	memset(Instruction->String, ' ', MAX_OPCODE_DESCRIPTION - 1);
+	Instruction->String[MAX_OPCODE_DESCRIPTION - 1] = '\0';
 	return TRUE;
 }
 
@@ -89,7 +84,7 @@ INSTRUCTION *GetInstruction(DISASSEMBLER *Disassembler, U64 VirtualAddress, U8 *
 	if (Disassembler->Initialized != DISASSEMBLER_INITIALIZED) { assert(0); return NULL; }
 	assert(Address);
 	InitInstruction(&Disassembler->Instruction, Disassembler);
-	Disassembler->Instruction.Address = Address;	
+	Disassembler->Instruction.Address = Address;
 	Disassembler->Instruction.VirtualAddressDelta = VirtualAddress - (U64)Address;
 	if (!Disassembler->Functions->GetInstruction(&Disassembler->Instruction, Address, Flags))
 	{
@@ -119,4 +114,3 @@ static ARCHITECTURE_FORMAT *GetArchitectureFormat(ARCHITECTURE_TYPE Type)
 	assert(0);
 	return NULL;
 }
-
